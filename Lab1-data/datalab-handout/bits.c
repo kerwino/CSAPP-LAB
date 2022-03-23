@@ -139,8 +139,18 @@ NOTES:
  *   Max ops: 14
  *   Rating: 1
  */
+
+// 1.1 -> 1
+/*--------------------------------------------------------------
+ *  x | y | (x|y) | (x&y) | ~(x&y) | (x^y) | ((x|y) & ~(x&y))  |                         
+ *  0 | 0 |   0   |   0   |    1   |   0   |         0         |           
+ *  0 | 1 |   1   |   0   |    1   |   1   |         1         |                        
+ *  1 | 0 |   1   |   0   |    1   |   1   |         1         | 
+ *  1 | 1 |   1   |   1   |    0   |   0   |         0         |
+ *--------------------------------------------------------------             
+ * (x|y) <=> ~(~x & ~y)   ->  x ^ y  <=>  ~(~x & ~y)&~(x & y)  
+ */         
 int bitXor(int x, int y) {
-  // 德摩根定律
   return ~(~x & ~y) & ~(x & y);
 }
 /* 
@@ -149,20 +159,12 @@ int bitXor(int x, int y) {
  *   Max ops: 4
  *   Rating: 1
  */
+
+// 1.2 -> 2
 int tmin(void) {
-  // 返回最小的32位二进制数
+  // 10000000_00000000_00000000_00000000
   return 1 << 31;
 }
-
-/*******************************
-
-1.1 使用德摩根定律表示异或
-
-1.2 最小的32位补数是 10000000_00000000_00000000_00000000
-
-********************************/
-
-
 //2
 /*
  * isTmax - returns 1 if x is the maximum, two's complement number,
@@ -171,8 +173,12 @@ int tmin(void) {
  *   Max ops: 10
  *   Rating: 2
  */
+
+// 2.1 -> 3
 int isTmax(int x) {
-  // 1 + x
+  // cond1:  when ~(x + 1) ^ x == 0, x = tmax or -1;
+  // cond2:  x != -1; (cause: ~(-1 + 1) ^ -1 == 0)
+  // cond1 and cond2 -> x == tmax;
   return !(x ^ (~(x + 1))) & !!((x+1) ^ 0); 
 }
 /* 
@@ -182,8 +188,11 @@ int isTmax(int x) {
  *   Max ops: 12
  *   Rating: 2
  */
+
+// 2.2 -> 4
 int allOddBits(int x) {
-  //常量不能超过 0xff
+  // Legal: x <= 0xff
+  // Use or operations and shift operations to get 0xAAAAAAAA
   int AA = 0xAA;
   int AAAA = AA | (AA << 8);
   int mask = AAAA | (AAAA << 16);
@@ -196,21 +205,17 @@ int allOddBits(int x) {
  *   Max ops: 5
  *   Rating: 2
  */
+
+// 2.3 -> 5
 int negate(int x) {
+  // negative number : 
+  //    befor : - (tmax + 1) + xxx       (xxx is a numeric bit)
+  //    after : tmax - xxx + 1
+  // positive number : 
+  //    befor : xxx 
+  //    after : - (tmax + 1) + (tmax - xxx) + 1
   return ~x + 1;
 }
-
-/*******************************
-
-2.1 使用异或进行比对两数是否一致
-    使用 !! 操作将数值表示成单位的布尔数
-
-2.2 通过二分法进行移位操作从而构建出特殊格式的大数
-
-2.3 一个数按位取反，根据补数的定义可以求得
-
-********************************/
-
 //3
 /* 
  * isAsciiDigit - return 1 if 0x30 <= x <= 0x39 (ASCII codes for characters '0' to '9')
@@ -221,19 +226,22 @@ int negate(int x) {
  *   Max ops: 15
  *   Rating: 3
  */
+
+// 3.1 -> 6
 int isAsciiDigit(int x) {
     // cond1:
-    // 除了后六位都是0
+    // 7~32 bits is 0
     // cond2:
-    // 第六位和第五位都是1
-    // cond3:
-    // 后四位在0000到1001之间
+    // 5~6 bits is 1
+    // condf:
+    // 1~4 bits is 0000~1001, it + 6 < 16
     int c1,c2,cf;
 
     c1 = x >> 6;
     c2 = (x >> 4) ^ 3;
     cf = ((x & 0xf) + 6) >> 4;
-    return !c1 & !c2 & !cf;
+    //return !c1 & !c2 & !cf;
+    return !(c1|c2|cf);
 }
 /* 
  * conditional - same as x ? y : z 
@@ -242,7 +250,11 @@ int isAsciiDigit(int x) {
  *   Max ops: 16
  *   Rating: 3
  */
+
+// 3.2 -> 7
 int conditional(int x, int y, int z) {
+  // get a mask from x : 
+  // 11...111 or 00...000
   int mask = (!!x) << 31 >> 31;
   return (mask & y) | (~mask & z);
 }
@@ -253,20 +265,17 @@ int conditional(int x, int y, int z) {
  *   Max ops: 24
  *   Rating: 3
  */
+
+// 3.3 -> 8
 int isLessOrEqual(int x, int y) {
-  // 判断符号位
-  int sx = (x >> 31) & 1;   // x 符号位
-  int sy = (y >> 31) & 1;   // y 符号位
-
-  // 如果不同号相减可能会溢出，因此先对不同号的情况进行处理
-
-  // 前正后负时 输出 0
-  // 前负后正时 输出 1
-  // 同号且，y - x 差值为正时 输出 1
-  int c1 = (!sx) & sy;                    // 1 表示 前正后负
-  int c2 = sx & (!sy);                    // 1 表示 前负后正
-  int c3 = !(sx ^ sy);                    // 1 表示 同号
-  int c4 = (((y + ~x + 1) >> 31) & 1);    // 0 表示 y >= x
+  // Overflow handling
+  int sx = (x >> 31) & 1;   
+  int sy = (y >> 31) & 1;   
+  int c1 = (!sx) & sy;                    
+  int c2 = sx & (!sy);    
+  // Same symbol handling
+  int c3 = !(sx ^ sy);                   
+  int c4 = (((y + ~x + 1) >> 31) & 1); 
 
   return (!c1) & (c2 | (c3 & !c4));
 }
@@ -279,11 +288,16 @@ int isLessOrEqual(int x, int y) {
  *   Max ops: 12
  *   Rating: 4 
  */
+
+// 4.1 -> 9
 int logicalNeg(int x) {
-  // 只有 任意的非零数字，与其相反数按位或符号位是1
-  int sign = (x | (~x + 1)) >> 31;
-  // 1111 或 0000
-  return sign + 1;
+  // base: 
+  // if x == 0:             (should return 1)
+  //    base == 00...000 == 0  -> return 0+1; 
+  // else:                  (should return 0)
+  //    base == 11...111 == -1 -> return -1+1;
+  int base = (x | (~x + 1)) >> 31;
+  return base + 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -291,41 +305,39 @@ int logicalNeg(int x) {
  *            howManyBits(298) = 10
  *            howManyBits(-5) = 4
  *            howManyBits(0)  = 1
- *            howManyBits(-1) = 1
+  *            howManyBits(-1) = 1
  *            howManyBits(0x80000000) = 32
  *  Legal ops: ! ~ & ^ | + << >>
  *  Max ops: 90
  *  Rating: 4
  */
+
+// 4.2 -> 10
 int howManyBits(int x) {
   int b16,b8,b4,b2,b1,b0;
   int mask = x >> 31;
-  // 正数 x = 0101, ~x = 1010, mask = 0000
-  // mask & ~x = 0000, ~mask & x = 0101, 最终 x = 0101
-  // 负数 x = 1010, ~x = 0101, mask = 1111
-  // mask & ~x = 0101, ~mask & x = 0000, 最终 x = 0101 
-  x = (mask & ~x) | (~mask & x); //如果为正数，保持不变；如果为负数，按位取反
+  x = (mask & ~x) | (~mask & x); 
 
-  //step1:判断高16为是否有1
-  b16 = !!(x >> 16) << 4; //如果高16为有1,则b16 = 16，否则为0
-  x >>= b16; //如果高16为有1,x右移16位舍弃低16位,在新的低16位继续查找；否则保持不变
-  //step2:判断高8位是否有1
+  
+  // Which side has 1? letf or right?
+  //  !!(x >> half_bit_of(x))
+  //  1 : left  has 1 -> bits += half_bit_of(x)
+  //  => x >> half_bit_of(x)
+  //  0 : right has 1 -> bits += 0
+  //  => do nothing
+  b16 = !!(x >> 16) << 4; 
+  x >>= b16; 
   b8 = !!(x >> 8) << 3;
   x >>= b8;
-  //step3:高4位
   b4 = !!(x >> 4) << 2;
   x >>= b4;
-  //step4:高2位
   b2 = !!(x >> 2) << 1;
   x >>= b2;
-  //step5:高1位
   b1 = !!(x >> 1);
   x >>= b1;
-  //step6:低1位
   b0 = x;
 
   return b16 + b8 + b4 + b2 + b1 + b0 + 1;
-  return 0;
 }
 //float
 /* 
@@ -339,17 +351,23 @@ int howManyBits(int x) {
  *   Max ops: 30
  *   Rating: 4
  */
+
+// 4.3 -> 11
 unsigned float_twice(unsigned uf) {
-  // 无穷大和NaN直接返回
-  // 无穷小和0数值乘2之后返回
-  // 其余则需要检测阶码乘2后是否为无穷大，如果是无穷大则返回无穷大（保留符号位）
-  // 如果不是无穷大，直接返回
+  // get sign
   unsigned sign = uf&(1<<31);
+  // get exponent
   unsigned exp = (uf&0x7f800000)>>23;
 
-
+  // Special class : fraction << 1, keep sign bit
   if(exp==0) return uf<<1|sign;
+  // NaN and infinity : do nothing
   if(exp==255) return uf;
+  // Normalized : exp++
+  //    if Become a special class:
+  //        chang other bit to 0x7f800000,just keep sign bit
+  //    else:
+  //        keep other bit, just add exponent to 1
   exp++;
   if(exp==255) return 0x7f800000|sign;
   return (exp<<23)|(uf&0x807fffff);
@@ -363,28 +381,45 @@ unsigned float_twice(unsigned uf) {
  *   Max ops: 30
  *   Rating: 4
  */
+
+// 4.4 -> 12
 unsigned float_i2f(int x) {
-  // 31位数值位，阶码最大为 127 + 31
-  int e = 158;
+  // int mask = 1<<31;
+  // int sign = x&mask;
+  // ------------------------- get symbol
+  // if (sign) x = -x;
+  // ------------------------- get the absolute value 
+  // int e = 127 + 31;
+  // if (!x) return 0;
+  // while(!(x&mask)){
+  //    e--;
+  //    x<<=1
+  // }
+  // ------------------------- get exponent
+  // int frac = (x & (~mask)) >> 8;
+  // Low eight bits equal 128 or has an odd mantissa 
+  // frac++;
+  // ------------------------- get frac
+
   int mask = 1<<31;
   int sign = x&mask;
+  int e = 127 + 31;
   int frac;
-  // 最小的负数为 -2^31 最大的正数为 2^31-1
-  // 将 -2^31 和 0 去除，其余保留符号转换成浮点数
-  if (x == mask) return mask | (158<<23);
-  if (!x) return 0;
-  if (sign) x = -x;
 
-  // 如果检查x的高位，如果是0则阶码-1，直到查到第一个1.
-  while (!(x&mask)) {
-    x = x << 1;
-    e = e - 1;
+  if(!x){
+    return 0;
   }
-  // 丢失精度
-  frac = (x & (~mask)) >> 8;
-  // 处理舍入，向偶舍入，当x的低八位等于128时，需要考虑frac的最低位
-  if (x & 0x80 && ((x & 0x7F) > 0 || frac & 1))
-    frac = frac + 1;
+  if(sign){
+    x = -x;
+  }
+
+  while(!(x&mask)){
+    e = e - 1;
+    x = x << 1;
+  }
+  frac = (x & (~mask)) >>  8;
+  if (x & 128 && ((x & 127) > 0 || frac & 1 ))
+    frac++;
   return sign + (e<<23) + frac;
 }
 /* 
@@ -399,30 +434,30 @@ unsigned float_i2f(int x) {
  *   Max ops: 30
  *   Rating: 4
  */
+
+// 4.5 -> 13
 int float_f2i(unsigned uf) {
-  int S     = uf>>31;
-  int E     = ((uf&0x7f800000)>>23)-127;
-  int frac = (uf&0x007fffff)|0x00800000;
+  unsigned sign = uf >> 31;
+  int e = ((uf >> 23) & 0xff) - 127;
+  unsigned frac_23 = (uf & 0x007fffff) | (0x00800000);
+
+  unsigned num = 0;
 
   // 0
-  if(!(uf&0x7fffffff)) return 0;
-  // 溢出
-  if(E > 31) return 0x80000000;
-  // 小数
-  if(E < 0) return 0;
-
-  // 根据阶码对frac移位
-  if(E > 23)
-    frac <<= (E-23);
-  else 
-    frac >>= (23-E);
-
-  // 正数检查溢出情况
-  // 负数不会溢出
-  if(!S){
-    if (frac>>31) return 0x80000000u;
-    else return frac;
+  if (e <= -1){
+    return 0;
   }
-  else
-    return ~frac + 1;
+  // >>
+  if (e > -1 && e < 23){
+    num = frac_23 >> (23 - e);
+  }
+  // <<
+  if (e >= 23 && e <= 30){
+    num = frac_23 << (e - 23);
+  }
+  // overflow
+  if (e > 30){
+    return 0x80000000u;
+  }
+  return sign ? (~num + 1) : num;
 }
