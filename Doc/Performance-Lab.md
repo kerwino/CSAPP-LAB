@@ -1,4 +1,4 @@
-## 实验四 Preformancce Lab 讲解
+## 实验四 Performancce Lab 讲解
 
 该实验主要考察了对于CSAPP书中第五章以及第六章的相关内容，例如基本的程序优化方法和基本原理、基于 cache 高速缓存对程序进行优化。
 
